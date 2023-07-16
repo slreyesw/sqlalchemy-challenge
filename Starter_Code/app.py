@@ -31,9 +31,110 @@ session = Session(engine)
 #################################################
 app = Flask(__name__)
 
-
-
-
 #################################################
 # Flask Routes
 #################################################
+@app.route("/")
+def home():
+     return (
+        f"Available Routes:<br/>"
+        f"/api/v1.0/percipitation<br/>"
+        f"/api/v1.0/stations<br/>"
+        f"/api/v1.0/tobs<br/>"
+        f'To search by a start date: <br/> Enter dates as YYYY-DD-MM after "/api/v1.0/" <br/> Example: /api/v1.0/2016-01-01<br/><br/>'
+        f"To search by a start date and end date: <br/> Enter dates as YYYY-DD-MM after '/api/v1.0/' <br/> Example: /api/v1.0/2016-01-01/2016-01-02-01 <br/>")
+
+@app.route("/api/v1.0/percipitation")
+def percipitation():
+#create session 
+   session = Session(engine)
+
+   last_12_months = session.query(Measurement.date, Measurement.prcp).\
+         filter(Measurement.date > "2016-08-22").\
+         order_by(Measurement.date.desc()).all()
+
+   session.close()
+
+   prcp_data = []
+   for date, prcp in last_12_months:
+         date_dict = {}
+         date_dict[date] = prcp
+         prcp_data.append(date_dict)
+   return jsonify(prcp_data)
+
+
+@app.route("/api/v1.0/stations")
+def stations():
+   session= Session(engine)
+   act_station = session.query(Measurement.station).\
+      group_by(Measurement.station).\
+      order_by(func.count(Measurement.station).desc()).all()
+
+   session.close()
+   station_names= list(np.ravel(act_station))
+   return jsonify(station_names)
+
+@app.route("/api/v1.0/tobs")
+def tobs():
+   session = Session(engine)
+
+   last_12_mo_act= session.query(Measurement.date, Measurement.tobs).\
+    filter(Measurement.date > "2016-08-22").\
+    filter(Measurement.station == "USC00519281").all()
+   
+   session.close()
+
+   tobs_data= []
+   for x, tobs in last_12_mo_act:
+      date_dict = {}
+      date_dict[x] = tobs
+      tobs_data.append(date_dict)
+   
+   tobs_temp= list(np.ravel(tobs_data))
+   return jsonify(tobs_temp)
+
+
+@app.route("/api/v1.0/<start>")
+def start_date(start):
+   session = Session(engine)
+
+   start_functions = session.query(Measurement.date, func.min(Measurement.tobs), func.avg(Measurement.tobs), func.max(Measurement.tobs)).\
+         filter(Measurement.date > start).\
+         group_by(Measurement.date).all()   
+   session.close()
+
+   start_data = []
+   for date, min, avg, max in start_functions:
+         start_dict = {}
+         start_dict["Date"] = date
+         start_dict["TMIN"] = min
+         start_dict["TAVG"] = avg
+         start_dict["TMAX"] = max
+         start_data.append(start_dict)
+
+   return jsonify(start_data)
+
+@app.route("/api/v1.0/<start>/<end>")
+def between(start, end):
+   session = Session(engine)
+
+   between_functions = session.query(Measurement.date, func.min(Measurement.tobs), func.avg(Measurement.tobs), func.max(Measurement.tobs)).\
+      filter(Measurement.date > start).\
+      filter(Measurement.date < end).\
+      group_by(Measurement.date).all()   
+    
+   session.close()
+
+   between_data = []
+   for date, min, avg, max in between_functions:
+               between_dict = {}
+               between_dict["Date"] = date
+               between_dict["TMIN"] = min
+               between_dict["TAVG"] = avg
+               between_dict["TMAX"] = max
+               between_data.append(between_dict)
+
+   return jsonify(between_data)
+
+if __name__ == '__main__':
+    app.run(debug=True)
